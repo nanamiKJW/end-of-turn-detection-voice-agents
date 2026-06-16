@@ -220,12 +220,40 @@ python src/evaluate.py
 streamlit run app/streamlit_app.py
 ```
 
+For the optional full scikit-learn training pipeline:
+
+```bash
+pip install -r requirements-ml.txt
+python src/train_classifier.py --data data/ami_turn_samples.csv
+python src/evaluate.py --data data/ami_turn_samples.csv
+```
+
 If you only want the working lightweight demo:
 
 ```bash
 python3 src/train_lightweight_classifier.py --data data/ami_turn_samples.csv
 python3 app/local_demo.py
 ```
+
+## Deploy on Streamlit Community Cloud
+
+This repository is ready to deploy on Streamlit Community Cloud.
+
+Use these settings:
+
+```text
+Repository: nanamiKJW/end-of-turn-detection-voice-agents
+Branch: main
+Main file path: app/streamlit_app.py
+```
+
+The deployed app uses:
+
+- `data/ami_turn_samples.csv`
+- `models/lightweight_eot_model.json`
+- `requirements.txt`
+
+The heavier `requirements-ml.txt` file is only for local model experiments and is not needed for the hosted app.
 
 Optional AMI extension after downloading and unzipping AMI manual annotations into `data/ami/raw/`:
 
@@ -243,6 +271,7 @@ end-of-turn-detection-voice-agents/
 ├── README.md
 ├── NOTICE.md
 ├── requirements.txt
+├── requirements-ml.txt
 ├── data/
 │   ├── ami/
 │   │   └── README.md

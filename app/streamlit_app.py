@@ -16,7 +16,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from baseline_pause_detector import evaluate_thresholds  # noqa: E402
-from predict import MODEL_PATH, predict_end_of_turn  # noqa: E402
+from predict import LIGHTWEIGHT_MODEL_PATH, MODEL_PATH, predict_end_of_turn  # noqa: E402
 from preprocessing import extract_text_signals  # noqa: E402
 from rule_based_detector import rule_based_prediction  # noqa: E402
 
@@ -106,6 +106,12 @@ with metric_col:
     if data is not None:
         st.metric("Dataset examples", len(data))
         st.metric("End-of-turn rate", f"{data['label_end_of_turn'].mean():.0%}")
+        if LIGHTWEIGHT_MODEL_PATH.exists():
+            st.metric("Demo model", "Trained lightweight")
+        elif MODEL_PATH.exists():
+            st.metric("Demo model", "scikit-learn")
+        else:
+            st.metric("Demo model", "Fallback")
     else:
         st.warning("Dataset not found. Run `python src/data_generation.py`.")
 
@@ -134,10 +140,16 @@ with right:
             st.error("Please enter an utterance.")
         else:
             try:
-                using_ml = MODEL_PATH.exists()
-                if using_ml:
+                has_trained_model = MODEL_PATH.exists() or LIGHTWEIGHT_MODEL_PATH.exists()
+                if has_trained_model:
                     result = predict_end_of_turn(utterance, pause_ms)
-                    model_name = "ML classifier"
+                    model_type = str(result.get("model_type", "trained_model"))
+                    if model_type == "lightweight_trained_model":
+                        model_name = "Trained lightweight model"
+                    elif model_type == "trained_ml_classifier":
+                        model_name = "scikit-learn classifier"
+                    else:
+                        model_name = "Trained model"
                 else:
                     result = rule_based_prediction(
                         utterance,
@@ -146,8 +158,8 @@ with right:
                     )
                     model_name = "Rule-based fallback"
 
-                is_end = bool(result["prediction"])
                 probability = float(result["probability_end_of_turn"])
+                is_end = probability >= decision_threshold
                 st.metric(
                     model_name,
                     "End of Turn" if is_end else "Likely Continuing",
@@ -156,10 +168,11 @@ with right:
                 baseline_label = "End of Turn" if pause_ms >= 700 else "Likely Continuing"
                 st.metric("Pause baseline at 700 ms", baseline_label)
 
-                if not using_ml:
+                if not has_trained_model:
                     st.warning(
                         "Trained model not found. Showing a transparent rule-based "
-                        "fallback. Run `python src/train_classifier.py` for the ML demo."
+                        "fallback. Run `python src/train_lightweight_classifier.py "
+                        "--data data/ami_turn_samples.csv` for the lightweight model."
                     )
 
                 st.write("Important signals")
