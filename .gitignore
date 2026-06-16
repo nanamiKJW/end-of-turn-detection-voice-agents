@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+models/*.joblib
+models/metrics.json
+data/ami/raw/
+data/ami/ami_public_manual_1.6.2/
+*.log
