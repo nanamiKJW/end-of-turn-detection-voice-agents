@@ -129,10 +129,10 @@ def available_datasets() -> dict[str, Path]:
 
 def get_model_name() -> str:
     if LIGHTWEIGHT_MODEL_PATH.exists():
-        return "Trained lightweight model"
+        return "AMI timing classifier"
     if MODEL_PATH.exists():
         return "scikit-learn classifier"
-    return "Transparent fallback"
+    return "fallback scorer"
 
 
 def predict_for_ui(utterance: str, pause_ms: int, threshold: float) -> dict[str, object]:
@@ -147,11 +147,11 @@ def predict_for_ui(utterance: str, pause_ms: int, threshold: float) -> dict[str,
     signals = extract_text_signals(utterance)
 
     if is_end:
-        action = "Assistant can respond"
-        explanation = "The model reads this as a completed turn."
+        action = "Respond"
+        explanation = "The current turn looks complete enough for a response."
     else:
-        action = "Assistant should keep listening"
-        explanation = "The model reads this as unfinished or likely to continue."
+        action = "Wait"
+        explanation = "The current turn still looks unfinished."
 
     return {
         "action": action,
@@ -168,17 +168,17 @@ def signal_notes(utterance: str, pause_ms: int) -> list[str]:
     signals = extract_text_signals(utterance)
     notes = []
     if pause_ms >= 700:
-        notes.append("The pause is above the 700 ms baseline threshold.")
+        notes.append("Pause is above the 700 ms baseline threshold.")
     else:
-        notes.append("The pause is below the 700 ms baseline threshold.")
+        notes.append("Pause is below the 700 ms baseline threshold.")
     if signals.last_token:
-        notes.append(f"The last token is `{signals.last_token}`.")
+        notes.append(f"Last token: `{signals.last_token}`.")
     if signals.last_token in {"to", "and", "or", "because", "with", "about", "for"}:
-        notes.append("That final token often leaves a phrase open.")
+        notes.append("This final token often leaves a phrase open.")
     if signals.ends_with_punctuation:
-        notes.append("The text has sentence-final punctuation.")
+        notes.append("Sentence-final punctuation is present.")
     if signals.is_backchannel:
-        notes.append("The utterance looks like a short response or backchannel.")
+        notes.append("This looks like a short response or backchannel.")
     notes.append(f"Completeness score: `{signals.syntactic_completeness_score}`.")
     return notes
 
@@ -188,9 +188,9 @@ st.markdown(
     <div class="hero">
       <div class="hero-title">End-of-Turn Detection for Voice Agents</div>
       <div class="hero-copy">
-        A portfolio prototype that estimates whether a user has finished speaking.
-        The app compares a simple pause baseline with a text-aware model trained on
-        AMI-derived meeting examples.
+        A small experiment on deciding whether a spoken turn is complete.
+        It compares a pause-only baseline with a transcript-based classifier
+        built from AMI-derived meeting examples.
       </div>
     </div>
     """,
@@ -206,23 +206,23 @@ selected_dataset_name = st.sidebar.selectbox("Dataset", list(datasets.keys()))
 selected_path = datasets[selected_dataset_name]
 data = load_dataset(str(selected_path))
 
-st.sidebar.markdown("### Model")
+st.sidebar.markdown("### Classifier")
 st.sidebar.write(get_model_name())
-st.sidebar.markdown("### Response style")
+st.sidebar.markdown("### Decision setting")
 style_name = st.sidebar.radio(
-    "Choose how cautious the assistant should be",
+    "Choose the threshold behavior",
     list(RESPONSE_STYLES.keys()),
     index=0,
 )
 decision_threshold = RESPONSE_STYLES[style_name]
 st.sidebar.caption(
-    "Respond earlier lowers the decision threshold. Wait longer raises it and reduces interruption risk."
+    "Lower thresholds respond sooner. Higher thresholds wait for stronger evidence."
 )
 
 top_metrics = st.columns(4)
 top_metrics[0].metric("Examples", f"{len(data):,}")
 top_metrics[1].metric("End-turn labels", f"{data['label_end_of_turn'].mean():.0%}")
-top_metrics[2].metric("Model", get_model_name())
+top_metrics[2].metric("Classifier", get_model_name())
 top_metrics[3].metric("Decision threshold", f"{decision_threshold:.0%}")
 
 demo_tab, data_tab, notes_tab = st.tabs(["Demo", "Data and Baseline", "Notes"])
@@ -231,13 +231,13 @@ with demo_tab:
     input_col, result_col = st.columns([1.1, 1], gap="large")
 
     with input_col:
-        st.subheader("Try a partial turn")
+        st.subheader("Input")
         example_name = st.selectbox("Example", list(EXAMPLES.keys()))
         utterance = st.text_area(
             "Transcript so far",
             value=EXAMPLES[example_name],
             height=120,
-            help="Type a partial user utterance or choose one of the examples.",
+            help="Type a partial utterance or choose one of the examples.",
         )
         pause_ms = st.slider(
             "Pause after speech",
@@ -251,15 +251,15 @@ with demo_tab:
         st.markdown(
             """
             <div class="note">
-            The decision is not only about silence. A short answer can be complete,
-            while a long pause can still happen in the middle of a sentence.
+            Silence is useful, but not sufficient. Short answers can be complete,
+            and long pauses can still occur inside an unfinished sentence.
             </div>
             """,
             unsafe_allow_html=True,
         )
 
     with result_col:
-        st.subheader("Result")
+        st.subheader("Output")
         prediction = predict_for_ui(utterance, pause_ms, decision_threshold)
 
         st.markdown(
@@ -273,10 +273,10 @@ with demo_tab:
         )
 
         score_cols = st.columns(2)
-        score_cols[0].metric("Model score", f"{prediction['probability']:.1%}")
+        score_cols[0].metric("Classifier score", f"{prediction['probability']:.1%}")
         score_cols[1].metric("Pause-only baseline", prediction["baseline_label"])
 
-        st.markdown("#### What influenced the result")
+        st.markdown("#### Signals")
         for note in signal_notes(utterance, pause_ms):
             st.write(f"- {note}")
 
@@ -298,8 +298,8 @@ with data_tab:
     baseline = evaluate_thresholds(data).round(3)
     st.subheader("Pause Baseline")
     st.write(
-        "The baseline predicts end-of-turn only from pause duration. It is useful as a reference point, "
-        "but it misses many conversational cases."
+        "The baseline uses only pause duration. It is a useful reference point, "
+        "but real turn-taking is not only a silence-threshold problem."
     )
     st.dataframe(baseline, use_container_width=True, hide_index=True)
 
@@ -316,15 +316,15 @@ with data_tab:
     st.dataframe(data[preview_columns].head(12), use_container_width=True, hide_index=True)
 
 with notes_tab:
-    st.subheader("How to Read This Project")
+    st.subheader("How to Read the Experiment")
     st.write(
-        "This is a prototype for a portfolio, not a production voice-agent system. "
+        "This is a prototype, not a production voice-agent system. "
         "The AMI-derived labels are proxy labels based on speaker timing: a speaker change is treated "
         "as an end-of-turn signal, while same-speaker continuation is treated as likely continuing."
     )
     st.write(
-        "The important part of the project is the workflow: baseline first, real-derived data, "
-        "interpretable features, error analysis, and a clear discussion of interruption versus latency."
+        "The useful part is the workflow: start with a baseline, build a real-derived dataset, "
+        "inspect interpretable features, and discuss interruption versus latency."
     )
     st.markdown("#### Error Trade-Off")
     st.write("- False end-of-turn: the assistant may interrupt the user.")
